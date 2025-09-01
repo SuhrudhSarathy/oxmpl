@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/juniorsundar/oxmpl/compare/v0.4.1...v0.5.0) (2025-09-01)
+
+
+### Features
+
+* Added SO3State/SO3StateSpace Python Bindings ([e2d8128](https://github.com/juniorsundar/oxmpl/commit/e2d8128fc4e2efaa21291d94fb2126a1fd3c1025))
+* Implement SO3StateSpace in Rust w/ Integration tests ([485fc95](https://github.com/juniorsundar/oxmpl/commit/485fc95d98bd234253d0cad44396a652e9f758df))
+
 ## [0.4.1](https://github.com/juniorsundar/oxmpl/compare/v0.4.0...v0.4.1) (2025-08-29)
 
 
