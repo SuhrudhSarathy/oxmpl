@@ -4,9 +4,10 @@
 
 use std::any::Any;
 
-pub use crate::base::states::real_vector_state::RealVectorState;
-pub use crate::base::states::so2_state::SO2State;
-pub use crate::base::states::so3_state::SO3State;
+pub use crate::base::states::{
+    compound_state::CompoundState, real_vector_state::RealVectorState, so2_state::SO2State,
+    so3_state::SO3State,
+};
 
 pub trait DynClone {
     fn clone_box(&self) -> Box<dyn State>;
@@ -39,9 +40,32 @@ impl Clone for Box<dyn State> {
     }
 }
 
+/// An enum that holds any of the library's built-in `State` types.
+///
+/// This enum is the counterpart to `StateSpaceVariant` and is the core of the "enum dispatch"
+/// pattern. It allows a `CompoundState` to hold a heterogeneous collection of different concrete
+/// state types in a type-safe way.
+///
+/// The `Custom` variant provides an "escape hatch" for users to include their own `State`
+/// implementations.
+///
+/// # Examples
+///
+/// ```
+/// use oxmpl::base::state::{CompoundState, RealVectorState, SO2State, StateVariant};
+///
+/// let pos_variant = StateVariant::RealVector(RealVectorState::new(vec![1.0, 2.0]));
+/// let rot_variant = StateVariant::SO2(SO2State::new(std::f64::consts::PI));
+///
+/// let combined_state = CompoundState {
+///     components: vec![pos_variant, rot_variant],
+/// };
+/// ```
 #[derive(Clone)]
-pub struct CompoundState {
-    pub components: Vec<Box<dyn State>>,
+pub enum StateVariant {
+    RealVector(RealVectorState),
+    SO2(SO2State),
+    SO3(SO3State),
+    // -- Add more as they come
+    Custom(Box<dyn State>),
 }
-
-impl State for CompoundState {}
