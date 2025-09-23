@@ -6,7 +6,7 @@ use rand::Rng;
 
 use crate::base::{
     error::StateSamplingError,
-    space::{StateSpace, StateSpaceVariant},
+    space::{AnyStateSpace, StateSpace},
     state::CompoundState,
 };
 
@@ -21,8 +21,8 @@ use crate::base::{
 /// Creating an SE(2) space for a 2D robot:
 /// ```
 /// use std::sync::Arc;
-/// use oxmpl::base::space::{CompoundStateSpace, RealVectorStateSpace, SO2StateSpace, StateSpaceVariant, StateSpace};
-/// use oxmpl::base::state::{CompoundState, RealVectorState, SO2State, StateVariant};
+/// use oxmpl::base::space::{CompoundStateSpace, RealVectorStateSpace, SO2StateSpace, StateSpace};
+/// use oxmpl::base::state::{CompoundState, RealVectorState, SO2State};
 ///
 /// // 1. Create the component spaces.
 /// let rvs_space = RealVectorStateSpace::new(2, Some(vec![(-1.0, 1.0), (-1.0, 1.0)])).unwrap();
@@ -31,8 +31,8 @@ use crate::base::{
 /// // 2. Create the CompoundStateSpace, giving equal weight to position and rotation.
 /// let se2_space = CompoundStateSpace::new(
 ///     vec![
-///         StateSpaceVariant::RealVector(rvs_space),
-///         StateSpaceVariant::SO2(so2_space)
+///         Box::new(rvs_space),
+///         Box::new(so2_space)
 ///     ],
 ///     vec![1.0, 1.0], // weights
 /// );
@@ -40,16 +40,16 @@ use crate::base::{
 /// // 3. Create a compound state for this space.
 /// let state = CompoundState {
 ///     components: vec![
-///         StateVariant::RealVector(RealVectorState::new(vec![0.5, 0.5])),
-///         StateVariant::SO2(SO2State::new(std::f64::consts::PI / 2.0)),
+///         Box::new(RealVectorState::new(vec![0.5, 0.5])),
+///         Box::new(SO2State::new(std::f64::consts::PI / 2.0)),
 ///     ],
 /// };
 ///
 /// assert!(se2_space.satisfies_bounds(&state));
 /// ```
 pub struct CompoundStateSpace {
-    /// The component state spaces, wrapped in the `StateSpaceVariant` enum.
-    pub subspaces: Vec<StateSpaceVariant>,
+    /// The component state spaces, as Box-dyn StateSpaces.
+    pub subspaces: Vec<Box<dyn AnyStateSpace>>,
     /// The weight of each component's contribution to the total distance.
     pub weights: Vec<f64>,
 }
@@ -60,7 +60,7 @@ impl CompoundStateSpace {
     /// # Panics
     ///
     /// Panics if the number of subspaces does not match the number of weights.
-    pub fn new(subspaces: Vec<StateSpaceVariant>, weights: Vec<f64>) -> Self {
+    pub fn new(subspaces: Vec<Box<dyn AnyStateSpace>>, weights: Vec<f64>) -> Self {
         assert_eq!(
             subspaces.len(),
             weights.len(),
@@ -80,7 +80,7 @@ impl StateSpace for CompoundStateSpace {
         let mut total_dist_sq = 0.0;
         for i in 0..self.subspaces.len() {
             let component_dist =
-                self.subspaces[i].distance(&state1.components[i], &state2.components[i]);
+                self.subspaces[i].distance_dyn(&*state1.components[i], &*state2.components[i]);
             total_dist_sq += (component_dist * self.weights[i]).powi(2);
         }
         total_dist_sq.sqrt()
@@ -95,11 +95,11 @@ impl StateSpace for CompoundStateSpace {
         out_state: &mut Self::StateType,
     ) {
         for i in 0..self.subspaces.len() {
-            self.subspaces[i].interpolate(
-                &from.components[i],
-                &to.components[i],
+            self.subspaces[i].interpolate_dyn(
+                &*from.components[i],
+                &*to.components[i],
                 t,
-                &mut out_state.components[i],
+                &mut *out_state.components[i],
             );
         }
     }
@@ -108,7 +108,7 @@ impl StateSpace for CompoundStateSpace {
     fn sample_uniform(&self, rng: &mut impl Rng) -> Result<Self::StateType, StateSamplingError> {
         let mut components = Vec::with_capacity(self.subspaces.len());
         for subspace in &self.subspaces {
-            let component_state = subspace.sample_uniform(rng)?;
+            let component_state = subspace.sample_uniform_dyn(rng)?;
             components.push(component_state);
         }
         Ok(CompoundState { components })
@@ -117,7 +117,7 @@ impl StateSpace for CompoundStateSpace {
     /// Enforces the bounds of a compound state by enforcing the bounds on each component.
     fn enforce_bounds(&self, state: &mut Self::StateType) {
         for i in 0..self.subspaces.len() {
-            self.subspaces[i].enforce_bounds(&mut state.components[i]);
+            self.subspaces[i].enforce_bounds_dyn(&mut *state.components[i]);
         }
     }
 
@@ -125,7 +125,7 @@ impl StateSpace for CompoundStateSpace {
     /// Returns `true` only if all components satisfy their respective subspace bounds.
     fn satisfies_bounds(&self, state: &Self::StateType) -> bool {
         for i in 0..self.subspaces.len() {
-            if !self.subspaces[i].satisfies_bounds(&state.components[i]) {
+            if !self.subspaces[i].satisfies_bounds_dyn(&*state.components[i]) {
                 false
             } else {
                 continue;
@@ -139,7 +139,7 @@ impl StateSpace for CompoundStateSpace {
         let mut total_longest_valid_segment_length_sq = 0.0;
         for i in 0..self.subspaces.len() {
             let component_longest_valid_segment_length =
-                self.subspaces[i].get_longest_valid_segment_length();
+                self.subspaces[i].get_longest_valid_segment_length_dyn();
             total_longest_valid_segment_length_sq +=
                 (component_longest_valid_segment_length * self.weights[i]).powi(2);
         }
